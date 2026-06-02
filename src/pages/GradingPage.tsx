@@ -1,16 +1,28 @@
-import { useState, useCallback, useRef } from 'react';
-import { Upload, X, Zap, ChevronLeft, RotateCcw, History, Download } from 'lucide-react';
-import { analyzeImage, GradeResult, GRADE_INFO } from '../lib/analyzeImage';
-import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
-import { savePrediction, fetchHistory, PredictionRecord } from '../lib/supabase';
-import ResultCard from '../components/ResultCard';
-import HistoryPanel from '../components/HistoryPanel';
+import { useState, useCallback, useRef } from "react";
+import {
+  Upload,
+  X,
+  Zap,
+  ChevronLeft,
+  RotateCcw,
+  History,
+  Download,
+} from "lucide-react";
+import { analyzeImage, GradeResult, GRADE_INFO } from "../lib/analyzeImage";
+import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import {
+  savePrediction,
+  fetchHistory,
+  PredictionRecord,
+} from "../lib/supabase";
+import ResultCard from "../components/ResultCard";
+import HistoryPanel from "../components/HistoryPanel";
 
 interface GradingPageProps {
-  onNavigate: (page: 'home' | 'grade') => void;
+  onNavigate: (page: "home" | "grade") => void;
 }
 
-type Stage = 'upload' | 'analyzing' | 'result';
+type Stage = "upload" | "analyzing" | "result";
 
 type DrawTextOptions = {
   x: number;
@@ -18,19 +30,15 @@ type DrawTextOptions = {
   maxWidth: number;
   size: number;
   lineHeight: number;
-  font: Awaited<ReturnType<PDFDocument['embedFont']>>;
+  font: Awaited<ReturnType<PDFDocument["embedFont"]>>;
   color: ReturnType<typeof rgb>;
 };
 
-function drawWrappedText(
-  page: any,
-  text: string,
-  options: DrawTextOptions,
-) {
+function drawWrappedText(page: any, text: string, options: DrawTextOptions) {
   const { x, y, maxWidth, size, lineHeight, font, color } = options;
   const words = text.split(/\s+/);
   const lines: string[] = [];
-  let current = '';
+  let current = "";
 
   words.forEach((word) => {
     const next = current ? `${current} ${word}` : word;
@@ -58,7 +66,7 @@ function drawWrappedText(
 }
 
 export default function GradingPage({ onNavigate }: GradingPageProps) {
-  const [stage, setStage] = useState<Stage>('upload');
+  const [stage, setStage] = useState<Stage>("upload");
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [result, setResult] = useState<GradeResult | null>(null);
@@ -70,12 +78,12 @@ export default function GradingPage({ onNavigate }: GradingPageProps) {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleFile = (f: File) => {
-    if (!f.type.startsWith('image/')) {
-      setError('Please upload a valid image file (JPG, PNG, WebP).');
+    if (!f.type.startsWith("image/")) {
+      setError("Please upload a valid image file (JPG, PNG, WebP).");
       return;
     }
     if (f.size > 10 * 1024 * 1024) {
-      setError('Image size must be under 10MB.');
+      setError("Image size must be under 10MB.");
       return;
     }
     setError(null);
@@ -92,17 +100,20 @@ export default function GradingPage({ onNavigate }: GradingPageProps) {
     if (f) handleFile(f);
   }, []);
 
-  const onDragOver = (e: React.DragEvent) => { e.preventDefault(); setDragging(true); };
+  const onDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragging(true);
+  };
   const onDragLeave = () => setDragging(false);
 
   const runAnalysis = async () => {
     if (!file) return;
-    setStage('analyzing');
+    setStage("analyzing");
     setError(null);
     try {
       const res = await analyzeImage(file);
       setResult(res);
-      setStage('result');
+      setStage("result");
       await savePrediction({
         image_name: file.name,
         predicted_grade: res.grade,
@@ -110,13 +121,17 @@ export default function GradingPage({ onNavigate }: GradingPageProps) {
         detection_data: res.raw,
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Analysis failed. Please try again.');
-      setStage('upload');
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Analysis failed. Please try again.",
+      );
+      setStage("upload");
     }
   };
 
   const reset = () => {
-    setStage('upload');
+    setStage("upload");
     setFile(null);
     setPreview(null);
     setResult(null);
@@ -133,7 +148,7 @@ export default function GradingPage({ onNavigate }: GradingPageProps) {
 
   const downloadResult = async () => {
     if (!result) return;
-    const info = GRADE_INFO[result.grade] || GRADE_INFO['Undetected'];
+    const info = GRADE_INFO[result.grade] || GRADE_INFO["Undetected"];
 
     const pdfDoc = await PDFDocument.create();
     const page = pdfDoc.addPage([595, 842]); // A4
@@ -172,7 +187,7 @@ export default function GradingPage({ onNavigate }: GradingPageProps) {
       color: accent,
     });
 
-    page.drawText('PomGradeAI', {
+    page.drawText("PomGradeAI", {
       x: margin,
       y: height - 48,
       size: 21,
@@ -180,7 +195,7 @@ export default function GradingPage({ onNavigate }: GradingPageProps) {
       color: rgb(1, 1, 1),
     });
 
-    page.drawText('Export Grade Report', {
+    page.drawText("Export Grade Report", {
       x: margin,
       y: height - 72,
       size: 13,
@@ -212,7 +227,7 @@ export default function GradingPage({ onNavigate }: GradingPageProps) {
       color: rgb(1, 1, 1),
     });
 
-    page.drawText('Confidence Rated', {
+    page.drawText("Confidence Rated", {
       x: width - margin - 138,
       y: height - 72,
       size: 8.5,
@@ -225,8 +240,8 @@ export default function GradingPage({ onNavigate }: GradingPageProps) {
     const gap = 10;
     const cardWidth = (contentWidth - gap * 2) / 3;
     const cards = [
-      { label: 'Confidence', value: `${result.confidence}%` },
-      { label: 'Response', value: `${result.responseTime ?? '-'}s` },
+      { label: "Confidence", value: `${result.confidence}%` },
+      { label: "Response", value: `${result.responseTime ?? "-"}s` },
     ];
 
     cards.forEach((card, index) => {
@@ -259,7 +274,7 @@ export default function GradingPage({ onNavigate }: GradingPageProps) {
 
     const sectionTop = cardTop - cardHeight - 26;
 
-    page.drawText('Report Overview', {
+    page.drawText("Report Overview", {
       x: margin,
       y: sectionTop,
       size: 13,
@@ -279,15 +294,19 @@ export default function GradingPage({ onNavigate }: GradingPageProps) {
       color: lightInk,
     });
     y -= 6;
-    y = drawWrappedText(page, `Timestamp: ${new Date(result.timestamp).toLocaleString()}`, {
-      x: margin,
-      y,
-      maxWidth: textMaxWidth,
-      size: 10.5,
-      lineHeight: 14,
-      font: fontRegular,
-      color: lightInk,
-    });
+    y = drawWrappedText(
+      page,
+      `Timestamp: ${new Date(result.timestamp).toLocaleString()}`,
+      {
+        x: margin,
+        y,
+        maxWidth: textMaxWidth,
+        size: 10.5,
+        lineHeight: 14,
+        font: fontRegular,
+        color: lightInk,
+      },
+    );
     y -= 6;
     y = drawWrappedText(page, `Grade: ${result.grade}`, {
       x: margin,
@@ -309,7 +328,7 @@ export default function GradingPage({ onNavigate }: GradingPageProps) {
       color: lightInk,
     });
     y -= 6;
-    y = drawWrappedText(page, `Response time: ${result.responseTime ?? '-'}s`, {
+    y = drawWrappedText(page, `Response time: ${result.responseTime ?? "-"}s`, {
       x: margin,
       y,
       maxWidth: textMaxWidth,
@@ -319,7 +338,7 @@ export default function GradingPage({ onNavigate }: GradingPageProps) {
       color: lightInk,
     });
 
-    page.drawText('Classification Notes', {
+    page.drawText("Classification Notes", {
       x: margin,
       y: y - 28,
       size: 13,
@@ -349,7 +368,7 @@ export default function GradingPage({ onNavigate }: GradingPageProps) {
       borderWidth: 1,
     });
 
-    page.drawText('Source Image', {
+    page.drawText("Source Image", {
       x: rightX + 12,
       y: 552,
       size: 12,
@@ -366,7 +385,7 @@ export default function GradingPage({ onNavigate }: GradingPageProps) {
         const imgBytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
         try {
           let embeddedImage: any;
-          if (mime.includes('png')) {
+          if (mime.includes("png")) {
             embeddedImage = await pdfDoc.embedPng(imgBytes);
           } else {
             embeddedImage = await pdfDoc.embedJpg(imgBytes);
@@ -382,9 +401,14 @@ export default function GradingPage({ onNavigate }: GradingPageProps) {
           const drawH = imgH * scale;
           const imgX = frameX + (frameW - drawW) / 2;
           const imgY = frameY + (frameH - drawH) / 2;
-          page.drawImage(embeddedImage, { x: imgX, y: imgY, width: drawW, height: drawH });
+          page.drawImage(embeddedImage, {
+            x: imgX,
+            y: imgY,
+            width: drawW,
+            height: drawH,
+          });
         } catch {
-          page.drawText('Preview image could not be embedded.', {
+          page.drawText("Preview image could not be embedded.", {
             x: rightX + 12,
             y: 444,
             size: 9,
@@ -394,7 +418,7 @@ export default function GradingPage({ onNavigate }: GradingPageProps) {
         }
       }
     } else {
-      page.drawText('No image preview available.', {
+      page.drawText("No image preview available.", {
         x: rightX + 12,
         y: 444,
         size: 9,
@@ -404,11 +428,11 @@ export default function GradingPage({ onNavigate }: GradingPageProps) {
     }
 
     const pdfBytes = await pdfDoc.save();
-    const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+    const blob = new Blob([pdfBytes], { type: "application/pdf" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
+    const a = document.createElement("a");
     a.href = url;
-    a.download = `pomgrade-${result.grade.replace(/\s/g, '-')}-${Date.now()}.pdf`;
+    a.download = `pomgrade-${result.grade.replace(/\s/g, "-")}-${Date.now()}.pdf`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -419,7 +443,7 @@ export default function GradingPage({ onNavigate }: GradingPageProps) {
       <div className="bg-charcoal border-b border-white/10">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
           <button
-            onClick={() => onNavigate('home')}
+            onClick={() => onNavigate("home")}
             className="flex items-center gap-2 text-white/60 hover:text-white transition-colors text-sm"
           >
             <ChevronLeft className="w-4 h-4" />
@@ -450,12 +474,13 @@ export default function GradingPage({ onNavigate }: GradingPageProps) {
             Pomegranate Export Grade Analysis
           </h1>
           <p className="text-charcoal/55 max-w-lg mx-auto text-sm">
-            Upload a pomegranate image to instantly detect surface husk disorders and receive an international export grade classification.
+            Upload a pomegranate image to instantly detect surface husk
+            disorders and receive an international export grade classification.
           </p>
         </div>
 
         {/* Stage: Upload */}
-        {stage === 'upload' && (
+        {stage === "upload" && (
           <div className="bg-white rounded-3xl border border-charcoal/10 shadow-lg overflow-hidden">
             {/* Drop zone */}
             <div
@@ -464,8 +489,8 @@ export default function GradingPage({ onNavigate }: GradingPageProps) {
               onDragLeave={onDragLeave}
               onClick={() => !preview && inputRef.current?.click()}
               className={`relative transition-all duration-200 ${
-                preview ? 'cursor-default' : 'cursor-pointer'
-              } ${dragging ? 'bg-pomegranate/5 border-pomegranate' : ''}`}
+                preview ? "cursor-default" : "cursor-pointer"
+              } ${dragging ? "bg-pomegranate/5 border-pomegranate" : ""}`}
             >
               {preview ? (
                 <div className="relative">
@@ -485,17 +510,31 @@ export default function GradingPage({ onNavigate }: GradingPageProps) {
                   </div>
                 </div>
               ) : (
-                <div className={`p-16 flex flex-col items-center justify-center text-center border-2 border-dashed m-6 rounded-2xl transition-all duration-200 ${
-                  dragging ? 'border-pomegranate bg-pomegranate/5' : 'border-charcoal/20 hover:border-pomegranate/40 hover:bg-pomegranate/2'
-                }`}>
-                  <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mb-4 transition-colors ${dragging ? 'bg-pomegranate/20' : 'bg-charcoal/5'}`}>
-                    <Upload className={`w-8 h-8 transition-colors ${dragging ? 'text-pomegranate' : 'text-charcoal/30'}`} />
+                <div
+                  className={`p-16 flex flex-col items-center justify-center text-center border-2 border-dashed m-6 rounded-2xl transition-all duration-200 ${
+                    dragging
+                      ? "border-pomegranate bg-pomegranate/5"
+                      : "border-charcoal/20 hover:border-pomegranate/40 hover:bg-pomegranate/2"
+                  }`}
+                >
+                  <div
+                    className={`w-16 h-16 rounded-2xl flex items-center justify-center mb-4 transition-colors ${dragging ? "bg-pomegranate/20" : "bg-charcoal/5"}`}
+                  >
+                    <Upload
+                      className={`w-8 h-8 transition-colors ${dragging ? "text-pomegranate" : "text-charcoal/30"}`}
+                    />
                   </div>
                   <p className="text-charcoal font-semibold mb-1">
-                    {dragging ? 'Drop your image here' : 'Drag & drop your pomegranate image'}
+                    {dragging
+                      ? "Drop your image here"
+                      : "Drag & drop your pomegranate image"}
                   </p>
-                  <p className="text-charcoal/40 text-sm mb-4">or click to browse</p>
-                  <p className="text-charcoal/30 text-xs">Supports JPG, PNG, WebP &bull; Max 10MB</p>
+                  <p className="text-charcoal/40 text-sm mb-4">
+                    or click to browse
+                  </p>
+                  <p className="text-charcoal/30 text-xs">
+                    Supports JPG, PNG, WebP &bull; Max 10MB
+                  </p>
                 </div>
               )}
               <input
@@ -503,7 +542,10 @@ export default function GradingPage({ onNavigate }: GradingPageProps) {
                 type="file"
                 accept="image/*"
                 className="hidden"
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) handleFile(f);
+                }}
               />
             </div>
 
@@ -546,7 +588,7 @@ export default function GradingPage({ onNavigate }: GradingPageProps) {
         )}
 
         {/* Stage: Analyzing */}
-        {stage === 'analyzing' && (
+        {stage === "analyzing" && (
           <div className="bg-white rounded-3xl border border-charcoal/10 shadow-lg p-12 flex flex-col items-center justify-center text-center">
             {preview && (
               <div className="relative mb-8">
@@ -561,9 +603,12 @@ export default function GradingPage({ onNavigate }: GradingPageProps) {
               </div>
             )}
             <div className="w-8 h-8 border-3 border-charcoal/10 border-t-pomegranate rounded-full animate-spin mb-4" />
-            <h3 className="text-charcoal font-bold text-lg mb-2">Analyzing Image...</h3>
+            <h3 className="text-charcoal font-bold text-lg mb-2">
+              Analyzing Image...
+            </h3>
             <p className="text-charcoal/50 text-sm max-w-xs">
-              Running AI segmentation model to detect surface husk disorders and calculate export grade.
+              Running AI segmentation model to detect surface husk disorders and
+              calculate export grade.
             </p>
             <div className="mt-6 flex gap-1">
               {[0, 1, 2].map((i) => (
@@ -578,7 +623,7 @@ export default function GradingPage({ onNavigate }: GradingPageProps) {
         )}
 
         {/* Stage: Result */}
-        {stage === 'result' && result && (
+        {stage === "result" && result && (
           <div className="space-y-5">
             <ResultCard result={result} preview={preview} />
             <div className="flex gap-3">
