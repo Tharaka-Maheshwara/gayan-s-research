@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef } from 'react';
 import { Upload, X, Zap, ChevronLeft, RotateCcw, History, Download } from 'lucide-react';
 import { analyzeImage, GradeResult, GRADE_INFO } from '../lib/analyzeImage';
+import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { savePrediction, fetchHistory, PredictionRecord } from '../lib/supabase';
 import ResultCard from '../components/ResultCard';
 import HistoryPanel from '../components/HistoryPanel';
@@ -10,6 +11,51 @@ interface GradingPageProps {
 }
 
 type Stage = 'upload' | 'analyzing' | 'result';
+
+type DrawTextOptions = {
+  x: number;
+  y: number;
+  maxWidth: number;
+  size: number;
+  lineHeight: number;
+  font: Awaited<ReturnType<PDFDocument['embedFont']>>;
+  color: ReturnType<typeof rgb>;
+};
+
+function drawWrappedText(
+  page: any,
+  text: string,
+  options: DrawTextOptions,
+) {
+  const { x, y, maxWidth, size, lineHeight, font, color } = options;
+  const words = text.split(/\s+/);
+  const lines: string[] = [];
+  let current = '';
+
+  words.forEach((word) => {
+    const next = current ? `${current} ${word}` : word;
+    if (font.widthOfTextAtSize(next, size) > maxWidth && current) {
+      lines.push(current);
+      current = word;
+    } else {
+      current = next;
+    }
+  });
+
+  if (current) lines.push(current);
+
+  lines.forEach((line, index) => {
+    page.drawText(line, {
+      x,
+      y: y - index * lineHeight,
+      size,
+      font,
+      color,
+    });
+  });
+
+  return y - lines.length * lineHeight;
+}
 
 export default function GradingPage({ onNavigate }: GradingPageProps) {
   const [stage, setStage] = useState<Stage>('upload');
@@ -85,26 +131,284 @@ export default function GradingPage({ onNavigate }: GradingPageProps) {
     setHistoryLoading(false);
   };
 
-  const downloadResult = () => {
+  const downloadResult = async () => {
     if (!result) return;
     const info = GRADE_INFO[result.grade] || GRADE_INFO['Undetected'];
-    const text = [
-      'PomGradeAI — Export Grade Report',
-      '================================',
-      `File: ${result.fileName}`,
-      `Timestamp: ${new Date(result.timestamp).toLocaleString()}`,
-      `Grade: ${result.grade}`,
-      `Confidence: ${result.confidence}%`,
-      '',
-      `Description: ${info.description}`,
-      '',
-      'Standards: Codex CXS 310-2013 | UNECE FFV-64',
-    ].join('\n');
-    const blob = new Blob([text], { type: 'text/plain' });
+
+    const pdfDoc = await PDFDocument.create();
+    const page = pdfDoc.addPage([595, 842]); // A4
+    const { width, height } = page.getSize();
+    const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+    const ink = rgb(0.13, 0.15, 0.18);
+    const muted = rgb(0.38, 0.42, 0.46);
+    const lightInk = rgb(0.27, 0.3, 0.34);
+    const accent = rgb(0.68, 0.15, 0.19);
+    const accentSoft = rgb(0.97, 0.92, 0.92);
+    const panel = rgb(0.98, 0.99, 1);
+    const border = rgb(0.86, 0.88, 0.9);
+
+    const margin = 42;
+    const contentWidth = width - margin * 2;
+    const bodyTop = height - 128;
+    const leftWidth = 300;
+    const rightX = margin + leftWidth + 18;
+    const rightWidth = contentWidth - leftWidth - 18;
+
+    page.drawRectangle({
+      x: 0,
+      y: height - 112,
+      width,
+      height: 112,
+      color: ink,
+    });
+
+    page.drawRectangle({
+      x: 0,
+      y: height - 112,
+      width,
+      height: 7,
+      color: accent,
+    });
+
+    page.drawText('PomGradeAI', {
+      x: margin,
+      y: height - 48,
+      size: 21,
+      font: fontBold,
+      color: rgb(1, 1, 1),
+    });
+
+    page.drawText('Export Grade Report', {
+      x: margin,
+      y: height - 72,
+      size: 13,
+      font: fontRegular,
+      color: rgb(0.88, 0.9, 0.92),
+    });
+
+    page.drawText(`Generated ${new Date(result.timestamp).toLocaleString()}`, {
+      x: margin,
+      y: height - 90,
+      size: 9.5,
+      font: fontRegular,
+      color: rgb(0.75, 0.78, 0.81),
+    });
+
+    page.drawRectangle({
+      x: width - margin - 150,
+      y: height - 82,
+      width: 150,
+      height: 36,
+      color: accent,
+    });
+
+    page.drawText(result.grade.toUpperCase(), {
+      x: width - margin - 138,
+      y: height - 59,
+      size: 12,
+      font: fontBold,
+      color: rgb(1, 1, 1),
+    });
+
+    page.drawText('Confidence Rated', {
+      x: width - margin - 138,
+      y: height - 72,
+      size: 8.5,
+      font: fontRegular,
+      color: rgb(0.94, 0.88, 0.88),
+    });
+
+    const cardTop = bodyTop - 18;
+    const cardHeight = 56;
+    const gap = 10;
+    const cardWidth = (contentWidth - gap * 2) / 3;
+    const cards = [
+      { label: 'Confidence', value: `${result.confidence}%` },
+      { label: 'Response', value: `${result.responseTime ?? '-'}s` },
+    ];
+
+    cards.forEach((card, index) => {
+      const x = margin + index * (cardWidth + gap);
+      page.drawRectangle({
+        x,
+        y: cardTop - cardHeight,
+        width: cardWidth,
+        height: cardHeight,
+        color: index === 1 ? accentSoft : panel,
+        borderColor: border,
+        borderWidth: 1,
+      });
+      page.drawText(card.label, {
+        x: x + 12,
+        y: cardTop - 18,
+        size: 8.5,
+        font: fontRegular,
+        color: muted,
+      });
+      page.drawText(card.value, {
+        x: x + 12,
+        y: cardTop - 36,
+        size: 12,
+        font: fontBold,
+        color: index === 1 ? accent : ink,
+        maxWidth: cardWidth - 24,
+      });
+    });
+
+    const sectionTop = cardTop - cardHeight - 26;
+
+    page.drawText('Report Overview', {
+      x: margin,
+      y: sectionTop,
+      size: 13,
+      font: fontBold,
+      color: ink,
+    });
+
+    const textMaxWidth = leftWidth;
+    let y = sectionTop - 22;
+    y = drawWrappedText(page, `File: ${result.fileName}`, {
+      x: margin,
+      y,
+      maxWidth: textMaxWidth,
+      size: 10.5,
+      lineHeight: 14,
+      font: fontRegular,
+      color: lightInk,
+    });
+    y -= 6;
+    y = drawWrappedText(page, `Timestamp: ${new Date(result.timestamp).toLocaleString()}`, {
+      x: margin,
+      y,
+      maxWidth: textMaxWidth,
+      size: 10.5,
+      lineHeight: 14,
+      font: fontRegular,
+      color: lightInk,
+    });
+    y -= 6;
+    y = drawWrappedText(page, `Grade: ${result.grade}`, {
+      x: margin,
+      y,
+      maxWidth: textMaxWidth,
+      size: 10.5,
+      lineHeight: 14,
+      font: fontRegular,
+      color: lightInk,
+    });
+    y -= 6;
+    y = drawWrappedText(page, `Confidence: ${result.confidence}%`, {
+      x: margin,
+      y,
+      maxWidth: textMaxWidth,
+      size: 10.5,
+      lineHeight: 14,
+      font: fontRegular,
+      color: lightInk,
+    });
+    y -= 6;
+    y = drawWrappedText(page, `Response time: ${result.responseTime ?? '-'}s`, {
+      x: margin,
+      y,
+      maxWidth: textMaxWidth,
+      size: 10.5,
+      lineHeight: 14,
+      font: fontRegular,
+      color: lightInk,
+    });
+
+    page.drawText('Classification Notes', {
+      x: margin,
+      y: y - 28,
+      size: 13,
+      font: fontBold,
+      color: ink,
+    });
+
+    const descY = y - 50;
+    const descWidth = leftWidth;
+    drawWrappedText(page, info.description, {
+      x: margin,
+      y: descY,
+      maxWidth: descWidth,
+      size: 10.5,
+      lineHeight: 14,
+      font: fontRegular,
+      color: lightInk,
+    });
+
+    page.drawRectangle({
+      x: rightX,
+      y: 392,
+      width: rightWidth,
+      height: 180,
+      color: panel,
+      borderColor: border,
+      borderWidth: 1,
+    });
+
+    page.drawText('Source Image', {
+      x: rightX + 12,
+      y: 552,
+      size: 12,
+      font: fontBold,
+      color: ink,
+    });
+
+    // If preview image exists, embed it in the framed panel on the right
+    if (preview) {
+      const match = preview.match(/^data:(image\/(png|jpeg|jpg));base64,(.*)$/);
+      if (match) {
+        const mime = match[1];
+        const b64 = match[3];
+        const imgBytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+        try {
+          let embeddedImage: any;
+          if (mime.includes('png')) {
+            embeddedImage = await pdfDoc.embedPng(imgBytes);
+          } else {
+            embeddedImage = await pdfDoc.embedJpg(imgBytes);
+          }
+          const frameX = rightX + 12;
+          const frameY = 406;
+          const frameW = rightWidth - 24;
+          const frameH = 132;
+          const imgW = embeddedImage.width;
+          const imgH = embeddedImage.height;
+          const scale = Math.min(frameW / imgW, frameH / imgH, 1);
+          const drawW = imgW * scale;
+          const drawH = imgH * scale;
+          const imgX = frameX + (frameW - drawW) / 2;
+          const imgY = frameY + (frameH - drawH) / 2;
+          page.drawImage(embeddedImage, { x: imgX, y: imgY, width: drawW, height: drawH });
+        } catch {
+          page.drawText('Preview image could not be embedded.', {
+            x: rightX + 12,
+            y: 444,
+            size: 9,
+            font: fontRegular,
+            color: muted,
+          });
+        }
+      }
+    } else {
+      page.drawText('No image preview available.', {
+        x: rightX + 12,
+        y: 444,
+        size: 9,
+        font: fontRegular,
+        color: muted,
+      });
+    }
+
+    const pdfBytes = await pdfDoc.save();
+    const blob = new Blob([pdfBytes], { type: 'application/pdf' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `pomgrade-${result.grade.replace(/\s/g, '-')}-${Date.now()}.txt`;
+    a.download = `pomgrade-${result.grade.replace(/\s/g, '-')}-${Date.now()}.pdf`;
     a.click();
     URL.revokeObjectURL(url);
   };
