@@ -123,13 +123,7 @@ export default function ResultCard({ result, preview }: ResultCardProps) {
               </div>
             </div>
 
-            {/* Detection count */}
-            {Array.isArray(result.predictions) && result.predictions.length > 0 && (
-              <div className="flex items-center gap-2 text-charcoal/50 text-xs">
-                <div className="w-2 h-2 rounded-full bg-emerald-400" />
-                {result.predictions.length} detection{result.predictions.length !== 1 ? 's' : ''} found
-              </div>
-            )}
+            {/* Detection count removed */}
           </div>
         </div>
       </div>
